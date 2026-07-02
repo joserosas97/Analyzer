@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ThreatScope</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy:   #0b0b14;
+      --navy2:  #111121;
+      --navy3:  #18182c;
+      --panel:  #0e0e1c;
+      --border: #232340;
+      --neon:   #a78bfa;
+      --neon2:  #8b5cf6;
+      --blue:   #818cf8;
+      --purple: #c4b5fd;
+      --red:    #e11d48;
+      --orange: #f59e0b;
+      --yellow: #fcd34d;
+      --white:  #f1f0ff;
+      --muted:  #4b4b72;
+      --muted2: #8b8bb5;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--navy);
+      color: var(--white);
+      font-family: 'Space Grotesk', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      height: 42px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 20;
+    }
+    .topbar-logo {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--neon);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .topbar-logo::before {
+      content: '▸';
+      color: var(--neon);
+    }
+    .topbar-sep { color: var(--border); font-size: 1.2rem; }
+    .topbar-tag {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted2);
+      letter-spacing: .08em;
+    }
+    /* Settings panel */
+    .settings-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .settings-overlay.open { display: flex; }
+    .settings-panel {
+      background: var(--navy2);
+      border: 1px solid var(--border);
+      width: 460px;
+      max-width: 95vw;
+    }
+    .settings-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .settings-head-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--neon);
+    }
+    .settings-close {
+      background: none;
+      border: none;
+      color: var(--muted2);
+      cursor: pointer;
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 2px 6px;
+    }
+    .settings-close:hover { color: var(--white); }
+    .settings-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+    .key-field { display: flex; flex-direction: column; gap: 5px; }
+    .key-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .key-saved {
+      color: var(--neon);
+      font-size: 0.6rem;
+    }
+    .key-input {
+      background: var(--navy);
+      border: 1px solid var(--border);
+      color: var(--white);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      padding: 9px 12px;
+      outline: none;
+      width: 100%;
+      transition: border-color .2s;
+      letter-spacing: .04em;
+    }
+    .key-input:focus { border-color: var(--neon); }
+    .key-input::placeholder { color: var(--muted); }
+    .settings-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .btn-save {
+      background: transparent;
+      border: 1px solid var(--neon);
+      color: var(--neon);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: .1em;
+      padding: 8px 20px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background .2s;
+    }
+    .btn-save:hover { background: rgba(167,139,250,.1); }
+    .btn-cancel {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted2);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: .1em;
+      padding: 8px 20px;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .settings-msg {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      text-align: center;
+      padding: 6px;
+      display: none;
+    }
+    .topbar-gear {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted2);
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 3px 10px;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem;
+      letter-spacing: .06em;
+      transition: border-color .2s, color .2s;
+    }
+    .topbar-gear:hover { border-color: var(--neon); color: var(--neon); }
+
+    .topbar-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.65rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted2);
+    }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--neon);
+      box-shadow: 0 0 8px var(--neon);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Layout ── */
+    .layout {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Left panel ── */
+    .left {
+      width: 340px;
+      flex-shrink: 0;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .left-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .left-header h1 {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .url-input-wrap {
+      position: relative;
+    }
+    .url-prefix {
+      position: absolute;
+      left: 10px; top: 50%;
+      transform: translateY(-50%);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--neon2);
+      pointer-events: none;
+    }
+    .url-input {
+      width: 100%;
+      background: var(--navy2);
+      border: 1px solid var(--border);
+      border-radius: 0;
+      color: var(--white);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
+      padding: 10px 10px 10px 28px;
+      outline: none;
+      transition: border-color .2s;
+      caret-color: var(--neon);
+    }
+    .url-input:focus { border-color: var(--neon); box-shadow: 0 0 0 1px var(--neon); }
+    .url-input::placeholder { color: var(--muted); }
+
+    .scan-btn {
+      width: 100%;
+      margin-top: 8px;
+      background: transparent;
+      border: 1px solid var(--neon);
+      color: var(--neon);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      padding: 10px;
+      cursor: pointer;
+      transition: background .2s, box-shadow .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .scan-btn:hover:not(:disabled) {
+      background: rgba(0,245,212,.08);
+      box-shadow: 0 0 20px rgba(0,245,212,.15);
+    }
+    .scan-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* Radar */
+    .radar-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .radar {
+      position: relative;
+      width: 140px; height: 140px;
+      margin-bottom: 16px;
+    }
+    .radar-svg { position: absolute; inset: 0; }
+    .radar-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-family: 'Space Mono', monospace;
+    }
+    .radar-verdict-text {
+      font-size: 0.6rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted2);
+      margin-bottom: 4px;
+    }
+    .radar-verdict-val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .radar-sweep {
+      position: absolute; inset: 0;
+      animation: sweep 2s linear infinite;
+      transform-origin: center;
+      display: none;
+    }
+    .radar-sweep.active { display: block; }
+    @keyframes sweep { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+    .radar-sources {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: center;
+    }
+    .src-pill {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      color: var(--muted2);
+      letter-spacing: .06em;
+      transition: border-color .3s, color .3s;
+    }
+    .src-pill.active {
+      border-color: var(--neon);
+      color: var(--neon);
+      box-shadow: 0 0 8px rgba(0,245,212,.2);
+    }
+    .src-pill.danger { border-color: var(--red); color: var(--red); box-shadow: 0 0 8px rgba(255,71,87,.2); }
+    .src-pill.warning { border-color: var(--orange); color: var(--orange); }
+    .src-pill.safe { border-color: var(--neon); color: var(--neon); }
+
+    /* Quick stats */
+    .quick-stats {
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .qs-item {
+      background: var(--navy2);
+      padding: 10px 12px;
+    }
+    .qs-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem;
+      color: var(--muted);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .qs-val {
+      font-family: 'Space Mono', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    /* Left footer */
+    .left-footer {
+      padding: 12px 20px;
+      margin-top: auto;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Right panel ── */
+    .right {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .right::-webkit-scrollbar { width: 4px; }
+    .right::-webkit-scrollbar-thumb { background: var(--border); }
+
+    /* Empty state */
+    .empty {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--muted);
+    }
+    .empty-ascii {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      line-height: 1.4;
+      color: var(--border);
+      text-align: center;
+    }
+    .empty p {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: .08em;
+    }
+
+    /* Results */
+    #results { display: none; }
+
+    /* Block header */
+    .block {
+      border-bottom: 1px solid var(--border);
+    }
+    .block-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 24px;
+      background: var(--navy2);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+    .block-head:hover { background: var(--navy3); }
+    .block-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--muted);
+      width: 20px;
+    }
+    .block-icon {
+      font-size: 0.9rem;
+      width: 22px;
+      text-align: center;
+    }
+    .block-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .block-badge {
+      margin-left: auto;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem;
+      padding: 2px 8px;
+      border: 1px solid currentColor;
+      letter-spacing: .06em;
+    }
+    .col-neon { color: var(--neon); }
+    .col-red { color: var(--red); }
+    .col-orange { color: var(--orange); }
+    .col-yellow { color: var(--yellow); }
+    .col-blue { color: var(--blue); }
+    .col-purple { color: var(--purple); }
+    .col-muted { color: var(--muted2); }
+
+    .block-body { padding: 16px 24px; }
+
+    /* Log rows */
+    .log-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(17,34,64,.6);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.5;
+    }
+    .log-row:last-child { border-bottom: none; }
+    .log-key {
+      color: var(--blue);
+      width: 180px;
+      flex-shrink: 0;
+    }
+    .log-key::after { content: ':'; color: var(--muted); }
+    .log-sep { color: var(--muted); width: 8px; flex-shrink: 0; }
+    .log-val { color: var(--white); word-break: break-all; flex: 1; }
+    .log-val.v-red { color: var(--red); }
+    .log-val.v-orange { color: var(--orange); }
+    .log-val.v-neon { color: var(--neon); }
+    .log-val.v-blue { color: var(--blue); }
+    .log-val.v-muted { color: var(--muted2); }
+    .log-val.v-purple { color: var(--purple); }
+    .log-val.v-yellow { color: var(--yellow); }
+
+    /* VT bars */
+    .vt-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .vt-counter {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .vt-counter-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .vt-counter-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted2);
+    }
+    .vt-bar-wrap { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .vt-bar-row { display: flex; align-items: center; gap: 8px; font-family: 'Space Mono', monospace; font-size: 0.65rem; }
+    .vt-bar-lbl { width: 76px; color: var(--muted2); flex-shrink: 0; }
+    .vt-bar-track { flex: 1; height: 4px; background: var(--border); overflow: hidden; }
+    .vt-bar-fill { height: 100%; transition: width .8s cubic-bezier(.4,0,.2,1); }
+    .vt-bar-n { width: 24px; text-align: right; }
+
+    /* Detection list */
+    .det-list { display: flex; flex-direction: column; gap: 4px; }
+    .det-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 10px;
+      background: var(--navy2);
+      border-left: 2px solid transparent;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      gap: 12px;
+    }
+    .det-row.mal { border-left-color: var(--red); }
+    .det-row.susp { border-left-color: var(--orange); }
+    .det-engine { color: var(--muted2); }
+    .det-result { text-align: right; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* IP table */
+    .ip-tbl { width: 100%; font-family: 'Space Mono', monospace; font-size: 0.65rem; border-collapse: collapse; }
+    .ip-tbl th { text-align: left; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); letter-spacing: .06em; font-weight: 400; }
+    .ip-tbl td { padding: 7px 8px; border-bottom: 1px solid rgba(17,34,64,.5); vertical-align: middle; }
+    .ip-tbl tr:last-child td { border-bottom: none; }
+    .ip-tbl tr:hover td { background: rgba(255,255,255,.02); }
+    .ip-addr { color: var(--blue); }
+    .abuse-bar { height: 3px; background: var(--border); margin-top: 3px; }
+    .abuse-fill { height: 100%; }
+
+    /* Tags */
+    .t-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
+    .t {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      padding: 2px 7px;
+      border: 1px solid var(--border);
+      color: var(--muted2);
+      letter-spacing: .04em;
+    }
+    .t.t-blue { border-color: rgba(76,201,240,.3); color: var(--blue); }
+    .t.t-purple { border-color: rgba(180,142,255,.3); color: var(--purple); }
+
+    /* Screenshot */
+    .ss-img { width: 100%; display: block; border: 1px solid var(--border); }
+
+    /* Score ring inline */
+    .ring-row { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+    .ring-mini { position: relative; width: 52px; height: 52px; flex-shrink: 0; }
+    .ring-mini svg { transform: rotate(-90deg); }
+    .ring-mini-num {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .ring-info { font-family: 'Space Mono', monospace; }
+    .ring-title { font-size: 0.7rem; color: var(--muted2); letter-spacing: .06em; }
+    .ring-sub { font-size: 0.85rem; font-weight: 700; margin-top: 2px; }
+
+    /* Loading */
+    #log-output {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--neon);
+      padding: 24px;
+      display: none;
+    }
+    .log-line { margin-bottom: 4px; }
+    .log-line::before { content: '> '; color: var(--muted); }
+    .cursor { display: inline-block; width: 8px; height: 1em; background: var(--neon); animation: blink .7s step-end infinite; vertical-align: text-bottom; }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .err-txt { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--red); }
+
+    @media (max-width: 768px) {
+      .left { width: 100%; }
+      .layout { flex-direction: column; }
+      .right { min-height: 60vh; }
+    }
+   .mode-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+   .mode-tab {
+     flex: 1; padding: 7px; text-align: center;
+     font-family: 'Space Mono', monospace; font-size: 0.62rem;
+     letter-spacing: .1em; text-transform: uppercase;
+     color: var(--muted); cursor: pointer;
+     border-bottom: 2px solid transparent;
+     transition: color .2s, border-color .2s;
+     background: none; border-top: none; border-left: none; border-right: none;
+   }
+   .mode-tab.active { color: var(--neon); border-bottom-color: var(--neon); }
+   .ip-textarea {
+     width: 100%; height: 120px;
+     background: var(--navy); border: 1px solid var(--border);
+     color: var(--white); font-family: 'Space Mono', monospace;
+     font-size: 0.72rem; padding: 10px 12px; outline: none; resize: none;
+     transition: border-color .2s; line-height: 1.6;
+   }
+   .ip-textarea:focus { border-color: var(--neon); }
+   .ip-textarea::placeholder { color: var(--muted); }
+   .ip-count { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--muted); margin-top: 5px; text-align: right; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">ThreatScope</div>
+  <span class="topbar-sep">|</span>
+  <span class="topbar-tag">URL THREAT INTELLIGENCE PLATFORM v2.0</span>
+  <div class="topbar-status">
+    <div class="status-dot"></div>
+    ONLINE · 4 SOURCES
+  </div>
+  <button class="topbar-gear" onclick="openSettings()">⚙ API KEYS</button>
+</div>
+
+<!-- Settings modal -->
+<div class="settings-overlay" id="settingsOverlay" onclick="closeOnBg(event)">
+  <div class="settings-panel">
+    <div class="settings-head">
+      <span class="settings-head-title">// Configurar API Keys</span>
+      <button class="settings-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="key-field">
+        <span class="key-label">VirusTotal <span class="key-saved" id="st-vt"></span></span>
+        <input class="key-input" id="k-vt" type="password" placeholder="Pega tu API key aquí..."/>
+      </div>
+      <div class="key-field">
+        <span class="key-label">URLscan.io <span class="key-saved" id="st-us"></span></span>
+        <input class="key-input" id="k-us" type="password" placeholder="Pega tu API key aquí..."/>
+      </div>
+      <div class="key-field">
+        <span class="key-label">AbuseIPDB <span class="key-saved" id="st-ab"></span></span>
+        <input class="key-input" id="k-ab" type="password" placeholder="Pega tu API key aquí..."/>
+      </div>
+      <div class="settings-msg" id="settingsMsg"></div>
+    </div>
+    <div class="settings-footer">
+      <button class="btn-cancel" onclick="closeSettings()">Cancelar</button>
+      <button class="btn-save" onclick="saveKeys()">[ Guardar Keys ]</button>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ── LEFT PANEL ── -->
+  <div class="left">
+    <div class="left-header">
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="tab-url" onclick="setMode('url')">URL SCAN</button>
+        <button class="mode-tab" id="tab-ip" onclick="setMode('ip')">IP SCANNER</button>
+      </div>
+      <div id="mode-url">
+        <div class="url-input-wrap">
+          <span class="url-prefix">$</span>
+          <input class="url-input" id="urlInput" type="text" placeholder="https://sitio-sospechoso.com" spellcheck="false" autocomplete="off"/>
+        </div>
+        <button class="scan-btn" id="scanBtn" onclick="startScan()">
+          <span id="btnText">[ SCAN TARGET ]</span>
+        </button>
+      </div>
+      <div id="mode-ip" style="display:none">
+        <textarea class="ip-textarea" id="ipTextarea" placeholder="Una IP por línea:&#10;192.168.1.1&#10;8.8.8.8&#10;1.1.1.1" spellcheck="false"></textarea>
+        <div class="ip-count" id="ipCount">0 IPs</div>
+        <button class="scan-btn" id="scanIpBtn" onclick="startIpScan()" style="margin-top:8px">
+          <span id="btnIpText">[ SCAN IPs ]</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Radar -->
+    <div class="radar-wrap">
+      <div class="radar">
+        <svg class="radar-svg" viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="65" fill="none" stroke="#112240" stroke-width="1"/>
+          <circle cx="70" cy="70" r="45" fill="none" stroke="#112240" stroke-width="1"/>
+          <circle cx="70" cy="70" r="25" fill="none" stroke="#112240" stroke-width="1"/>
+          <line x1="70" y1="5" x2="70" y2="135" stroke="#112240" stroke-width="1"/>
+          <line x1="5" y1="70" x2="135" y2="70" stroke="#112240" stroke-width="1"/>
+          <circle id="radarDot" cx="70" cy="70" r="4" fill="#00f5d4" style="display:none"/>
+        </svg>
+        <!-- Sweep arm -->
+        <svg class="radar-sweep" id="radarSweep" viewBox="0 0 140 140">
+          <defs>
+            <radialGradient id="sweepGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#00f5d4" stop-opacity=".6"/>
+              <stop offset="100%" stop-color="#00f5d4" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <path d="M70,70 L70,5 A65,65 0 0,1 135,70 Z" fill="url(#sweepGrad)" opacity=".4"/>
+        </svg>
+        <div class="radar-center">
+          <div class="radar-verdict-text" id="radarLabel">IDLE</div>
+          <div class="radar-verdict-val" id="radarVal" style="color:var(--muted)">—</div>
+        </div>
+      </div>
+      <div class="radar-sources">
+        <span class="src-pill" id="src-vt">VIRUSTOTAL</span>
+        <span class="src-pill" id="src-us">URLSCAN</span>
+        <span class="src-pill" id="src-ab">ABUSEIPDB</span>
+        <span class="src-pill" id="src-geo">GEOIP</span>
+        <span class="src-pill" id="src-wh">WHOIS</span>
+      </div>
+    </div>
+
+    <!-- Quick stats -->
+    <div class="quick-stats" id="quickStats" style="display:none">
+      <div class="qs-item">
+        <div class="qs-label">VT Detec.</div>
+        <div class="qs-val" id="qs-vt" style="color:var(--red)">—</div>
+      </div>
+      <div class="qs-item">
+        <div class="qs-label">Abuse Score</div>
+        <div class="qs-val" id="qs-ab" style="color:var(--orange)">—</div>
+      </div>
+      <div class="qs-item">
+        <div class="qs-label">URLscan</div>
+        <div class="qs-val" id="qs-us" style="color:var(--blue)">—</div>
+      </div>
+      <div class="qs-item">
+        <div class="qs-label">IPs</div>
+        <div class="qs-val" id="qs-ips" style="color:var(--purple)">—</div>
+      </div>
+    </div>
+
+    <div class="left-footer" id="leftFooter">
+      AWAITING TARGET...
+    </div>
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div class="right" id="rightPanel">
+
+    <div class="empty" id="emptyState">
+      <div class="empty-ascii">
+┌─────────────────────────────┐<br>
+│  ████████╗██╗  ██╗██████╗  │<br>
+│     ██╔══╝██║  ██║██╔══██╗ │<br>
+│     ██║   ███████║██████╔╝ │<br>
+│     ██║   ██╔══██║██╔══██╗ │<br>
+│     ██║   ██║  ██║██║  ██║ │<br>
+│     ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ │<br>
+└─────────────────────────────┘
+      </div>
+      <p>// INGRESA UNA URL Y PRESIONA SCAN</p>
+    </div>
+
+    <div id="log-output"></div>
+    <div id="results"></div>
+
+  </div>
+</div>
+
+<script>
+  const urlInput   = document.getElementById('urlInput');
+  const scanBtn    = document.getElementById('scanBtn');
+  const btnText    = document.getElementById('btnText');
+  const radarSweep = document.getElementById('radarSweep');
+  const radarLabel = document.getElementById('radarLabel');
+  const radarVal   = document.getElementById('radarVal');
+  const radarDot   = document.getElementById('radarDot');
+  const logOut     = document.getElementById('log-output');
+  const resultsEl  = document.getElementById('results');
+  const emptyState = document.getElementById('emptyState');
+  const quickStats = document.getElementById('quickStats');
+  const leftFooter = document.getElementById('leftFooter');
+
+  urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') startScan(); });
+
+  /* ── Settings ── */
+  async function openSettings() {
+    document.getElementById('settingsOverlay').classList.add('open');
+    // Load current key status
+    try {
+      const res = await fetch('/api/keys');
+      const data = await res.json();
+      document.getElementById('st-vt').textContent = data.virustotal ? '● CONFIGURADA' : '';
+      document.getElementById('st-us').textContent = data.urlscan    ? '● CONFIGURADA' : '';
+      document.getElementById('st-ab').textContent = data.abuseipdb  ? '● CONFIGURADA' : '';
+    } catch {}
+  }
+
+  function closeSettings() {
+    document.getElementById('settingsOverlay').classList.remove('open');
+    document.getElementById('settingsMsg').style.display = 'none';
+    ['k-vt','k-us','k-ab'].forEach(id => document.getElementById(id).value = '');
+  }
+
+  function closeOnBg(e) {
+    if (e.target === document.getElementById('settingsOverlay')) closeSettings();
+  }
+
+  async function saveKeys() {
+    const msg = document.getElementById('settingsMsg');
+    const body = {
+      virustotal: document.getElementById('k-vt').value.trim(),
+      urlscan:    document.getElementById('k-us').value.trim(),
+      abuseipdb:  document.getElementById('k-ab').value.trim(),
+    };
+    if (!Object.values(body).some(v => v)) {
+      msg.style.display = 'block';
+      msg.style.color = 'var(--orange)';
+      msg.textContent = '// Ingresa al menos una API key';
+      return;
+    }
+    try {
+      const res = await fetch('/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        msg.style.display = 'block';
+        msg.style.color = 'var(--neon)';
+        msg.textContent = '✓ Keys guardadas correctamente';
+        setTimeout(closeSettings, 1200);
+      }
+    } catch {
+      msg.style.display = 'block';
+      msg.style.color = 'var(--red)';
+      msg.textContent = '// Error al guardar';
+    }
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
+
+  /* ── Mode switcher ── */
+  function setMode(mode) {
+    document.getElementById('tab-url').classList.toggle('active', mode === 'url');
+    document.getElementById('tab-ip').classList.toggle('active', mode === 'ip');
+    document.getElementById('mode-url').style.display = mode === 'url' ? 'block' : 'none';
+    document.getElementById('mode-ip').style.display = mode === 'ip' ? 'block' : 'none';
+  }
+
+  document.getElementById('ipTextarea')?.addEventListener('input', function() {
+    const ips = this.value.split('\n').map(s=>s.trim()).filter(Boolean);
+    document.getElementById('ipCount').textContent = `${ips.length} IP${ips.length !== 1 ? 's' : ''}`;
+  });
+
+  async function startIpScan() {
+    const raw = document.getElementById('ipTextarea').value;
+    const ips = raw.split('\n').map(s => s.trim()).filter(Boolean);
+    if (!ips.length) return;
+
+    const btn = document.getElementById('scanIpBtn');
+    const btnTxt = document.getElementById('btnIpText');
+    btn.disabled = true;
+    btnTxt.textContent = '[ SCANNING... ]';
+    emptyState.style.display = 'none';
+    resultsEl.style.display = 'none';
+    resultsEl.innerHTML = '';
+    logOut.style.display = 'block';
+    logOut.innerHTML = '';
+    sources.forEach(s => { document.getElementById(s).className = 'src-pill'; });
+    radarSweep.classList.add('active');
+    setRadar('SCANNING', `${ips.length} IPs`, 'var(--neon)');
+    leftFooter.textContent = `SCANNING ${ips.length} IPs...`;
+
+    log(`Consultando ${ips.length} IPs en paralelo...`);
+    srcActive('src-ab');
+    srcActive('src-geo');
+
+    try {
+      const res = await fetch('/api/scan-ips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ips })
+      });
+      const data = await res.json();
+      log(`Análisis completado — ${data.results.length} resultados.`);
+      renderIpResults(data.results);
+    } catch(e) {
+      log('ERROR: No se pudo conectar con el servidor.');
+      radarSweep.classList.remove('active');
+      setRadar('ERROR', '!', 'var(--red)');
+    } finally {
+      btn.disabled = false;
+      btnTxt.textContent = '[ SCAN IPs ]';
+    }
+  }
+
+  function renderIpResults(rows) {
+    const malCount  = rows.filter(r => r.abuse_score > 50).length;
+    const suspCount = rows.filter(r => r.abuse_score > 20 && r.abuse_score <= 50).length;
+
+    radarSweep.classList.remove('active');
+    const vColor = malCount ? 'var(--red)' : suspCount ? 'var(--orange)' : 'var(--neon)';
+    setRadar(malCount ? 'THREAT' : suspCount ? 'CAUTION' : 'CLEAN', `${rows.length} IPs`, vColor);
+    radarDot.style.display = 'block';
+    radarDot.setAttribute('fill', vColor);
+    srcResult('src-ab', malCount ? 'danger' : suspCount ? 'warning' : 'safe');
+    srcResult('src-geo', 'safe');
+    leftFooter.textContent = `LAST SCAN: ${new Date().toLocaleTimeString()}`;
+
+    logOut.style.display = 'none';
+
+    let html = `<div class="block">
+      <div class="block-head">
+        <span class="block-num">01</span>
+        <span class="block-icon">🕵️</span>
+        <span class="block-title col-${malCount ? 'red' : suspCount ? 'orange' : 'neon'}">REPUTACIÓN DE IPs</span>
+        <span class="block-badge col-${malCount ? 'red' : suspCount ? 'orange' : 'neon'}">${malCount ? `${malCount} MALICIOSAS` : suspCount ? `${suspCount} SOSPECHOSAS` : 'TODAS LIMPIAS'}</span>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="ip-tbl">
+        <thead><tr>
+          <th>#</th><th>IP ADDRESS</th><th>ABUSE SCORE</th>
+          <th>ORGANIZACIÓN</th><th>UBICACIÓN</th>
+          <th>TIPO</th><th>REPORTES</th><th>ÚLTIMO REPORTE</th>
+        </tr></thead>
+        <tbody>`;
+
+    rows.forEach((row, i) => {
+      const col = row.abuse_score > 50 ? 'var(--red)' : row.abuse_score > 20 ? 'var(--orange)' : 'var(--neon)';
+      const barW = row.abuse_score;
+      const org  = row.org || row.isp || '—';
+      const loc  = [row.city, row.country].filter(Boolean).join(', ') || '—';
+      const tip  = row.is_tor ? '⚠️ TOR' : row.is_hosting ? 'HOSTING' : row.usage_type || '—';
+      const lastRep = row.last_reported ? row.last_reported.split('T')[0] : '—';
+      const rowBg = row.abuse_score > 50 ? 'rgba(225,29,72,.05)' : row.abuse_score > 20 ? 'rgba(245,158,11,.04)' : '';
+      html += `<tr style="background:${rowBg}">
+        <td style="color:var(--muted)">${i+1}</td>
+        <td><span class="ip-addr">${row.ip}</span></td>
+        <td>
+          <span style="color:${col};font-weight:700;font-family:'Space Mono',monospace">${row.abuse_score}%</span>
+          <div class="abuse-bar" style="margin-top:4px"><div class="abuse-fill" style="width:${barW}%;background:${col}"></div></div>
+        </td>
+        <td style="color:var(--muted2);font-size:.68rem">${org}</td>
+        <td style="font-size:.68rem">${loc}</td>
+        <td style="color:var(--muted2);font-size:.68rem">${tip}</td>
+        <td style="font-family:'Space Mono',monospace;font-size:.68rem">${row.total_reports}</td>
+        <td style="color:var(--muted2);font-family:'Space Mono',monospace;font-size:.65rem">${lastRep}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table></div></div>`;
+    html += `<div style="height:40px"></div>`;
+    resultsEl.innerHTML = html;
+    resultsEl.style.display = 'block';
+    document.getElementById('rightPanel').scrollTo({ top: 0 });
+  }
+
+  const sources = ['src-vt','src-us','src-ab','src-geo','src-wh'];
+
+  function setRadar(label, val, color) {
+    radarLabel.textContent = label;
+    radarVal.textContent = val;
+    radarVal.style.color = color;
+  }
+
+  function srcActive(id) {
+    document.getElementById(id).classList.add('active');
+  }
+  function srcResult(id, cls) {
+    const el = document.getElementById(id);
+    el.classList.remove('active');
+    el.classList.add(cls);
+  }
+
+  function log(msg) {
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    line.textContent = msg;
+    logOut.appendChild(line);
+    logOut.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+
+  async function startScan() {
+    const url = urlInput.value.trim();
+    if (!url) return;
+
+    // Reset UI
+    scanBtn.disabled = true;
+    btnText.textContent = '[ SCANNING... ]';
+    emptyState.style.display = 'none';
+    resultsEl.style.display = 'none';
+    resultsEl.innerHTML = '';
+    logOut.style.display = 'block';
+    logOut.innerHTML = '';
+    quickStats.style.display = 'none';
+    sources.forEach(s => {
+      const el = document.getElementById(s);
+      el.className = 'src-pill';
+    });
+    radarDot.style.display = 'none';
+
+    radarSweep.classList.add('active');
+    setRadar('SCANNING', '...', 'var(--neon)');
+    leftFooter.textContent = 'SCANNING TARGET...';
+
+    log(`Iniciando análisis de ${url}`);
+    log('Consultando VirusTotal...');
+    srcActive('src-vt');
+
+    setTimeout(() => { log('Consultando URLscan.io...'); srcActive('src-us'); }, 800);
+    setTimeout(() => { log('Consultando AbuseIPDB...'); srcActive('src-ab'); }, 1400);
+    setTimeout(() => { log('Resolviendo GeoIP...'); srcActive('src-geo'); }, 1900);
+    setTimeout(() => { log('Consultando WHOIS/RDAP...'); srcActive('src-wh'); }, 2400);
+
+    try {
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+      log('Análisis completado.');
+      renderResults(data);
+    } catch (e) {
+      log('ERROR: No se pudo conectar con el servidor.');
+      radarSweep.classList.remove('active');
+      setRadar('ERROR', '!', 'var(--red)');
+    } finally {
+      scanBtn.disabled = false;
+      btnText.textContent = '[ SCAN TARGET ]';
+    }
+  }
+
+  /* ── Render ── */
+  function renderResults(d) {
+    const vt     = d.virustotal || {};
+    const abuse  = d.abuseipdb  || {};
+    const us     = d.urlscan    || {};
+    const geo    = d.geo        || {};
+    const whois  = d.whois      || {};
+    const cias   = d.contacted_ips_analysis || [];
+
+    const vtMal  = vt.malicious   || 0;
+    const vtSusp = vt.suspicious  || 0;
+    const vtHarm = vt.harmless    || 0;
+    const vtUnd  = vt.undetected  || 0;
+    const vtTotal= vtMal + vtSusp + vtHarm + vtUnd;
+    const aScore = abuse.abuse_score || 0;
+    const usScore= us.score || 0;
+    const usMal  = us.malicious;
+
+    // Verdict
+    let vLabel, vVal, vColor;
+    if (vtMal > 2 || aScore > 50 || usMal) {
+      vLabel = 'THREAT'; vVal = 'MALICIOUS'; vColor = 'var(--red)';
+    } else if (vtMal > 0 || vtSusp > 0 || aScore > 20 || usScore > 20) {
+      vLabel = 'CAUTION'; vVal = 'SUSPICIOUS'; vColor = 'var(--orange)';
+    } else {
+      vLabel = 'STATUS'; vVal = 'CLEAN'; vColor = 'var(--neon)';
+    }
+
+    radarSweep.classList.remove('active');
+    setRadar(vLabel, vVal, vColor);
+    radarDot.style.display = 'block';
+    radarDot.setAttribute('fill', vColor);
+
+    // Source status pills
+    srcResult('src-vt', vtMal > 0 ? 'danger' : 'safe');
+    srcResult('src-us', usMal || usScore > 20 ? 'danger' : 'safe');
+    srcResult('src-ab', aScore > 50 ? 'danger' : aScore > 20 ? 'warning' : 'safe');
+    srcResult('src-geo', 'safe');
+    srcResult('src-wh', 'safe');
+
+    // Quick stats
+    document.getElementById('qs-vt').textContent = `${vtMal}/${vtTotal}`;
+    document.getElementById('qs-vt').style.color = vtMal > 0 ? 'var(--red)' : 'var(--neon)';
+    document.getElementById('qs-ab').textContent = `${aScore}%`;
+    document.getElementById('qs-ab').style.color = aScore > 50 ? 'var(--red)' : aScore > 20 ? 'var(--orange)' : 'var(--neon)';
+    document.getElementById('qs-us').textContent = `${usScore}`;
+    document.getElementById('qs-us').style.color = usMal ? 'var(--red)' : 'var(--blue)';
+    document.getElementById('qs-ips').textContent = cias.length || (us.ips_contacted||[]).length;
+    quickStats.style.display = 'grid';
+    leftFooter.textContent = `LAST SCAN: ${new Date().toLocaleTimeString()}`;
+
+    logOut.style.display = 'none';
+
+    function scoreCol(s) { return s > 50 ? 'var(--red)' : s > 20 ? 'var(--orange)' : 'var(--neon)'; }
+    function bar(pct, col) { return `<div class="vt-bar-track"><div class="vt-bar-fill" style="width:${pct}%;background:${col}"></div></div>`; }
+    function logRow(key, val, cls='') {
+      return `<div class="log-row"><span class="log-key">${key}</span><span class="log-sep"> </span><span class="log-val ${cls}">${val}</span></div>`;
+    }
+    function block(num, icon, title, badgeText, badgeCol, body) {
+      return `<div class="block">
+        <div class="block-head">
+          <span class="block-num">${String(num).padStart(2,'0')}</span>
+          <span class="block-icon">${icon}</span>
+          <span class="block-title col-${badgeCol}">${title}</span>
+          <span class="block-badge col-${badgeCol}">${badgeText}</span>
+        </div>
+        <div class="block-body">${body}</div>
+      </div>`;
+    }
+    function ring(val, max, col, title, sub) {
+      const r = 21, c = 2*Math.PI*r, dash = Math.min(val/max,1)*c;
+      return `<div class="ring-row">
+        <div class="ring-mini">
+          <svg width="52" height="52" viewBox="0 0 52 52">
+            <circle cx="26" cy="26" r="${r}" fill="none" stroke="#112240" stroke-width="5"/>
+            <circle cx="26" cy="26" r="${r}" fill="none" stroke="${col}" stroke-width="5"
+              stroke-dasharray="${dash} ${c}" stroke-linecap="round"/>
+          </svg>
+          <div class="ring-mini-num" style="color:${col}">${val}</div>
+        </div>
+        <div class="ring-info">
+          <div class="ring-title">${title}</div>
+          <div class="ring-sub" style="color:${col}">${sub}</div>
+        </div>
+      </div>`;
+    }
+
+    let html = '';
+
+    /* 01 — VirusTotal */
+    let vtBody = '';
+    if (vt.error) {
+      vtBody = `<p class="err-txt">${vt.error}</p>`;
+    } else {
+      vtBody += `<div class="vt-section">
+        <div class="vt-counter">
+          <div class="vt-counter-num" style="color:var(--red)">${vtMal}</div>
+          <div class="vt-counter-label">Maliciosos</div>
+        </div>
+        <div class="vt-counter">
+          <div class="vt-counter-num" style="color:var(--orange)">${vtSusp}</div>
+          <div class="vt-counter-label">Sospechosos</div>
+        </div>
+      </div>`;
+      const p = n => vtTotal > 0 ? (n/vtTotal*100).toFixed(0) : 0;
+      vtBody += `<div class="vt-bar-wrap">
+        ${['Malicioso','Sospechoso','Inofensivo','Sin detec.'].map((l,i) => {
+          const vals=[vtMal,vtSusp,vtHarm,vtUnd], cols=['var(--red)','var(--orange)','var(--neon)','var(--muted)'];
+          return `<div class="vt-bar-row">
+            <span class="vt-bar-lbl">${l}</span>
+            ${bar(p(vals[i]), cols[i])}
+            <span class="vt-bar-n" style="color:${cols[i]}">${vals[i]}</span>
+          </div>`;
+        }).join('')}
+      </div>`;
+      if (vt.categories?.length) vtBody += logRow('categorias', vt.categories.join(', '), 'v-blue');
+      if (vt.tags?.length) vtBody += `<div class="log-row"><span class="log-key">tags</span><span class="log-sep"> </span><span class="log-val"><div class="t-wrap">${vt.tags.map(t=>`<span class="t t-blue">${t}</span>`).join('')}</div></span></div>`;
+      if (vt.redirection) vtBody += logRow('redireccion', vt.redirection, 'v-orange');
+    }
+    const vtBadge = vtMal > 2 ? `${vtMal} DETECCIONES` : vtMal > 0 ? `${vtMal} DETECCIÓN` : 'LIMPIO';
+    const vtCol   = vtMal > 2 ? 'red' : vtMal > 0 ? 'orange' : 'neon';
+    html += block(1,'🛡','VIRUSTOTAL', vtBadge, vtCol, vtBody);
+
+    /* 02 — URLscan */
+    let usBody = '';
+    if (us.error && !us.report_url) {
+      usBody = `<p class="err-txt">${us.error}</p>`;
+    } else {
+      usBody += ring(usScore, 100, scoreCol(usScore), 'THREAT SCORE', usMal ? 'MALICIOSO' : usScore > 20 ? 'SOSPECHOSO' : 'LIMPIO');
+      if (us.page_title)    usBody += logRow('page_title', us.page_title);
+      if (us.brands?.length) usBody += logRow('brand_target', `🎯 ${us.brands.join(', ')}`, 'v-red');
+      if (us.categories?.length) usBody += logRow('categories', us.categories.join(', '), 'v-yellow');
+      if (us.server)        usBody += logRow('server', us.server, 'v-muted');
+      if (us.total_requests) usBody += logRow('http_requests', us.total_requests);
+      if (us.report_url)    usBody += logRow('report', `<a href="${us.report_url}" target="_blank">${us.report_url}</a>`);
+    }
+    const usBadge = usMal ? 'MALICIOSO' : usScore > 20 ? 'SOSPECHOSO' : 'OK';
+    const usCol   = usMal ? 'red' : usScore > 20 ? 'orange' : 'neon';
+    html += block(2,'📡','URLSCAN.IO', usBadge, usCol, usBody);
+
+    /* 03 — Motores */
+    if (vt.detections?.length) {
+      let detBody = `<div class="det-list">`;
+      vt.detections.forEach(det => {
+        const isMal = det.category === 'malicious';
+        detBody += `<div class="det-row ${isMal ? 'mal' : 'susp'}">
+          <span class="det-engine col-muted">${det.engine}</span>
+          <span class="det-result" style="color:${isMal ? 'var(--red)' : 'var(--orange)'}">${det.result || det.category}</span>
+        </div>`;
+      });
+      detBody += `</div>`;
+      html += block(3,'☣','MOTORES POSITIVOS', `${vt.detections.length} ENGINES`, 'red', detBody);
+    }
+
+    /* 04 — Infraestructura */
+    let infraBody = '';
+    // GeoIP
+    infraBody += `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">`;
+    infraBody += logRow('ip_address', `<span style="color:var(--blue)">${d.ip || 'N/A'}</span>`);
+    if (geo.city)    infraBody += logRow('location', `${[geo.city,geo.region,geo.country].filter(Boolean).join(' › ')}`);
+    if (geo.org)     infraBody += logRow('organization', geo.org, 'v-muted');
+    if (geo.asn)     infraBody += logRow('asn', geo.asn, 'v-muted');
+    if (geo.is_hosting != null) infraBody += logRow('hosting_vps', geo.is_hosting ? 'YES ⚠️' : 'NO', geo.is_hosting ? 'v-orange' : 'v-neon');
+    infraBody += `</div>`;
+    // AbuseIPDB
+    infraBody += ring(aScore, 100, scoreCol(aScore), 'ABUSEIPDB · ABUSE SCORE', `${abuse.total_reports||0} reportes en 90 días`);
+    if (!abuse.error) {
+      if (abuse.isp)         infraBody += logRow('isp', abuse.isp, 'v-muted');
+      if (abuse.usage_type)  infraBody += logRow('usage_type', abuse.usage_type, 'v-muted');
+      if (abuse.distinct_users != null) infraBody += logRow('distinct_users', abuse.distinct_users);
+      infraBody += logRow('tor_node', abuse.is_tor ? 'YES ⚠️' : 'NO', abuse.is_tor ? 'v-red' : 'v-neon');
+      if (abuse.last_reported) infraBody += logRow('last_report', abuse.last_reported.split('T')[0], 'v-muted');
+    }
+    html += block(4,'🌐','INFRAESTRUCTURA', d.ip || 'N/A', 'blue', infraBody);
+
+    /* 05 — WHOIS */
+    let whoBody = '';
+    if (!whois.registered && !whois.registrar) {
+      whoBody = `<p class="err-txt" style="color:var(--muted2)">// DATOS NO DISPONIBLES PARA ESTE DOMINIO</p>`;
+    } else {
+      if (whois.registrar)    whoBody += logRow('registrar', whois.registrar);
+      if (whois.registered)   whoBody += logRow('registered', whois.registered.split('T')[0]);
+      if (whois.expires)      whoBody += logRow('expires', whois.expires.split('T')[0], 'v-yellow');
+      if (whois.last_changed) whoBody += logRow('last_changed', whois.last_changed.split('T')[0], 'v-muted');
+      if (whois.nameservers?.length) whoBody += logRow('nameservers', whois.nameservers.join(' | '), 'v-muted');
+      if (whois.status?.length) whoBody += `<div class="log-row"><span class="log-key">status</span><span class="log-sep"> </span><span class="log-val"><div class="t-wrap">${whois.status.map(s=>`<span class="t">${s}</span>`).join('')}</div></span></div>`;
+    }
+    html += block(5,'📋','WHOIS / DOMAIN', d.hostname || '—', 'purple', whoBody);
+
+    /* 06 — Red y tecnologías */
+    const hasTech   = us.technologies?.length;
+    const hasDomains= us.domains_contacted?.length;
+    if (hasTech || hasDomains) {
+      let netBody = '';
+      if (hasTech) {
+        netBody += `<div class="log-row" style="flex-direction:column;gap:6px;align-items:flex-start">
+          <span class="log-key">technologies</span>
+          <div class="t-wrap">${us.technologies.map(t=>`<span class="t t-blue">${t}</span>`).join('')}</div>
+        </div>`;
+      }
+      if (us.countries_contacted?.length) netBody += logRow('countries', us.countries_contacted.join(', '), 'v-blue');
+      if (hasDomains) {
+        netBody += `<div class="log-row" style="flex-direction:column;gap:6px;align-items:flex-start">
+          <span class="log-key">domains_contacted</span>
+          <div class="t-wrap">${us.domains_contacted.map(d=>`<span class="t">${d}</span>`).join('')}</div>
+        </div>`;
+      }
+      html += block(6,'🔗','RED Y TECNOLOGÍAS', `${(us.domains_contacted||[]).length} DOMINIOS`, 'blue', netBody);
+    }
+
+    /* 07 — IPs contactadas (renumbered from 07) */
+    if (cias.length) {
+      const malCount  = cias.filter(x => x.abuse_score > 50).length;
+      const suspCount = cias.filter(x => x.abuse_score > 20 && x.abuse_score <= 50).length;
+      let ipBody = `<div style="overflow-x:auto"><table class="ip-tbl">
+        <thead><tr>
+          <th>IP ADDRESS</th><th>ABUSE</th><th>ORGANIZATION</th>
+          <th>LOCATION</th><th>TYPE</th><th>REPORTS</th>
+        </tr></thead><tbody>`;
+      cias.forEach(row => {
+        const col = row.abuse_score > 50 ? 'var(--red)' : row.abuse_score > 20 ? 'var(--orange)' : 'var(--neon)';
+        const org = row.org || row.isp || '—';
+        const loc = [row.city, row.country].filter(Boolean).join(', ') || '—';
+        const tip = row.is_tor ? '⚠️ TOR' : row.is_hosting ? 'HOSTING' : row.usage_type || '—';
+        ipBody += `<tr>
+          <td><span class="ip-addr">${row.ip}</span></td>
+          <td>
+            <span style="color:${col};font-weight:700">${row.abuse_score}%</span>
+            <div class="abuse-bar"><div class="abuse-fill" style="width:${row.abuse_score}%;background:${col}"></div></div>
+          </td>
+          <td style="color:var(--muted2)">${org}</td>
+          <td>${loc}</td>
+          <td style="color:var(--muted2)">${tip}</td>
+          <td>${row.total_reports}</td>
+        </tr>`;
+      });
+      ipBody += `</tbody></table></div>`;
+      const ipBadge = malCount ? `${malCount} MALICIOSAS` : suspCount ? `${suspCount} SOSPECHOSAS` : 'ALL CLEAN';
+      const ipCol   = malCount ? 'red' : suspCount ? 'orange' : 'neon';
+      html += block(7,'🕵','REPUTACIÓN IPs CONTACTADAS', ipBadge, ipCol, ipBody);
+    }
+
+    /* 08 — Screenshot (solo si URLscan encontró una página web real) */
+    const isWebPage = us.page_title || (us.mime_type && us.mime_type.includes('html'));
+    if (us.screenshot && isWebPage) {
+      html += block(8,'📸','SCREENSHOT', 'URLSCAN.IO', 'muted',
+        `<img class="ss-img" src="${us.screenshot}" alt="screenshot" onerror="this.closest('.block').style.display='none'"/>`);
+    }
+
+    resultsEl.innerHTML = html;
+    resultsEl.style.display = 'block';
+    document.getElementById('rightPanel').scrollTo({ top: 0 });
+  }
+</script>
+</body>
+</html>
