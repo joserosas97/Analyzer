@@ -12,5 +12,3 @@ services:
         sync: false
       - key: ABUSEIPDB_API_KEY
         sync: false
-      - key: SHODAN_API_KEY
-        sync: false
