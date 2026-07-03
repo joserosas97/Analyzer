@@ -569,6 +569,21 @@
     .ip-tbl th { text-align: left; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); letter-spacing: .06em; font-weight: 400; }
     .ip-tbl th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
     .ip-tbl th.sortable:hover { color: var(--neon); }
+
+    .btn-export {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted2);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem;
+      letter-spacing: .06em;
+      padding: 4px 10px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: border-color .2s, color .2s;
+      white-space: nowrap;
+    }
+    .btn-export:hover { border-color: var(--neon); color: var(--neon); }
     .ip-tbl td { padding: 7px 8px; border-bottom: 1px solid rgba(17,34,64,.5); vertical-align: middle; }
     .ip-tbl tr:last-child td { border-bottom: none; }
     .ip-tbl tr:hover td { background: rgba(255,255,255,.02); }
@@ -961,6 +976,44 @@
     renderIpTable();
   }
 
+  function getSortedIpRows() {
+    if (!ipSortKey) return ipScanRows;
+    const get = ipSortGetters[ipSortKey];
+    return [...ipScanRows].sort((a, b) => {
+      const va = get(a), vb = get(b);
+      if (va < vb) return -1 * ipSortDir;
+      if (va > vb) return 1 * ipSortDir;
+      return 0;
+    });
+  }
+
+  function csvEscape(val) {
+    const s = String(val ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+
+  function exportIpCsv() {
+    if (!ipScanRows.length) return;
+    const header = ['IP', 'Abuse Score', 'Organizacion', 'Ubicacion', 'Tipo', 'Reportes', 'Ultimo Reporte'];
+    const lines = [header.join(',')];
+    getSortedIpRows().forEach(row => {
+      const org = row.org || row.isp || '';
+      const loc = [row.city, row.country].filter(Boolean).join(', ');
+      const tip = row.is_tor ? 'TOR' : row.is_hosting ? 'HOSTING' : (row.usage_type || '');
+      const lastRep = row.last_reported ? row.last_reported.split('T')[0] : '';
+      lines.push([row.ip, `${row.abuse_score}%`, org, loc, tip, row.total_reports, lastRep].map(csvEscape).join(','));
+    });
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ip-scan-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function ipTableHeadHtml() {
     return IP_TBL_COLS.map(c => {
       if (!c.key) return `<th>${c.label}</th>`;
@@ -995,16 +1048,7 @@
   }
 
   function renderIpTable() {
-    let rows = ipScanRows;
-    if (ipSortKey) {
-      const get = ipSortGetters[ipSortKey];
-      rows = [...ipScanRows].sort((a, b) => {
-        const va = get(a), vb = get(b);
-        if (va < vb) return -1 * ipSortDir;
-        if (va > vb) return 1 * ipSortDir;
-        return 0;
-      });
-    }
+    const rows = getSortedIpRows();
     const head = document.getElementById('ipTableHead');
     const body = document.getElementById('ipTableBody');
     if (head) head.innerHTML = ipTableHeadHtml();
@@ -1036,6 +1080,7 @@
         <span class="block-icon">🕵️</span>
         <span class="block-title col-${malCount ? 'red' : suspCount ? 'orange' : 'neon'}">REPUTACIÓN DE IPs</span>
         <span class="block-badge col-${malCount ? 'red' : suspCount ? 'orange' : 'neon'}">${malCount ? `${malCount} MALICIOSAS` : suspCount ? `${suspCount} SOSPECHOSAS` : 'TODAS LIMPIAS'}</span>
+        <button class="btn-export" onclick="exportIpCsv()">⬇ EXPORTAR CSV</button>
       </div>
       <div style="overflow-x:auto">
       <table class="ip-tbl">
