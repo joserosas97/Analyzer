@@ -567,6 +567,8 @@
     /* IP table */
     .ip-tbl { width: 100%; font-family: 'Space Mono', monospace; font-size: 0.65rem; border-collapse: collapse; }
     .ip-tbl th { text-align: left; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); letter-spacing: .06em; font-weight: 400; }
+    .ip-tbl th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    .ip-tbl th.sortable:hover { color: var(--neon); }
     .ip-tbl td { padding: 7px 8px; border-bottom: 1px solid rgba(17,34,64,.5); vertical-align: middle; }
     .ip-tbl tr:last-child td { border-bottom: none; }
     .ip-tbl tr:hover td { background: rgba(255,255,255,.02); }
@@ -929,7 +931,91 @@
     }
   }
 
+  let ipScanRows = [];
+  let ipSortKey  = null;
+  let ipSortDir  = 1;
+
+  const ipSortGetters = {
+    ip:            r => r.ip.split('.').map(n => n.padStart(3,'0')).join('.'),
+    abuse_score:   r => r.abuse_score || 0,
+    org:           r => (r.org || r.isp || '').toLowerCase(),
+    location:      r => [r.city, r.country].filter(Boolean).join(', ').toLowerCase(),
+    type:          r => (r.is_tor ? 'tor' : r.is_hosting ? 'hosting' : (r.usage_type || '')).toLowerCase(),
+    total_reports: r => r.total_reports || 0,
+    last_reported: r => r.last_reported || '',
+  };
+
+  const IP_TBL_COLS = [
+    { label: '#',              key: null },
+    { label: 'IP ADDRESS',     key: 'ip' },
+    { label: 'ABUSE SCORE',    key: 'abuse_score' },
+    { label: 'ORGANIZACIÓN',   key: 'org' },
+    { label: 'UBICACIÓN',      key: 'location' },
+    { label: 'TIPO',           key: 'type' },
+    { label: 'REPORTES',       key: 'total_reports' },
+    { label: 'ÚLTIMO REPORTE', key: 'last_reported' },
+  ];
+
+  function sortIpRows(key) {
+    if (ipSortKey === key) { ipSortDir *= -1; } else { ipSortKey = key; ipSortDir = 1; }
+    renderIpTable();
+  }
+
+  function ipTableHeadHtml() {
+    return IP_TBL_COLS.map(c => {
+      if (!c.key) return `<th>${c.label}</th>`;
+      const arrow = ipSortKey === c.key ? (ipSortDir === 1 ? ' ▲' : ' ▼') : '';
+      return `<th class="sortable" onclick="sortIpRows('${c.key}')">${c.label}${arrow}</th>`;
+    }).join('');
+  }
+
+  function ipTableRowsHtml(rows) {
+    return rows.map((row, i) => {
+      const col = row.abuse_score > 50 ? 'var(--red)' : row.abuse_score > 20 ? 'var(--orange)' : 'var(--neon)';
+      const barW = row.abuse_score;
+      const org  = row.org || row.isp || '—';
+      const loc  = [row.city, row.country].filter(Boolean).join(', ') || '—';
+      const tip  = row.is_tor ? '⚠️ TOR' : row.is_hosting ? 'HOSTING' : row.usage_type || '—';
+      const lastRep = row.last_reported ? row.last_reported.split('T')[0] : '—';
+      const rowBg = row.abuse_score > 50 ? 'rgba(225,29,72,.05)' : row.abuse_score > 20 ? 'rgba(245,158,11,.04)' : '';
+      return `<tr style="background:${rowBg}">
+        <td style="color:var(--muted)">${i+1}</td>
+        <td><span class="ip-addr">${row.ip}</span></td>
+        <td>
+          <span style="color:${col};font-weight:700;font-family:'Space Mono',monospace">${row.abuse_score}%</span>
+          <div class="abuse-bar" style="margin-top:4px"><div class="abuse-fill" style="width:${barW}%;background:${col}"></div></div>
+        </td>
+        <td style="color:var(--muted2);font-size:.68rem">${org}</td>
+        <td style="font-size:.68rem">${loc}</td>
+        <td style="color:var(--muted2);font-size:.68rem">${tip}</td>
+        <td style="font-family:'Space Mono',monospace;font-size:.68rem">${row.total_reports}</td>
+        <td style="color:var(--muted2);font-family:'Space Mono',monospace;font-size:.65rem">${lastRep}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderIpTable() {
+    let rows = ipScanRows;
+    if (ipSortKey) {
+      const get = ipSortGetters[ipSortKey];
+      rows = [...ipScanRows].sort((a, b) => {
+        const va = get(a), vb = get(b);
+        if (va < vb) return -1 * ipSortDir;
+        if (va > vb) return 1 * ipSortDir;
+        return 0;
+      });
+    }
+    const head = document.getElementById('ipTableHead');
+    const body = document.getElementById('ipTableBody');
+    if (head) head.innerHTML = ipTableHeadHtml();
+    if (body) body.innerHTML = ipTableRowsHtml(rows);
+  }
+
   function renderIpResults(rows) {
+    ipScanRows = rows;
+    ipSortKey  = null;
+    ipSortDir  = 1;
+
     const malCount  = rows.filter(r => r.abuse_score > 50).length;
     const suspCount = rows.filter(r => r.abuse_score > 20 && r.abuse_score <= 50).length;
 
@@ -953,37 +1039,11 @@
       </div>
       <div style="overflow-x:auto">
       <table class="ip-tbl">
-        <thead><tr>
-          <th>#</th><th>IP ADDRESS</th><th>ABUSE SCORE</th>
-          <th>ORGANIZACIÓN</th><th>UBICACIÓN</th>
-          <th>TIPO</th><th>REPORTES</th><th>ÚLTIMO REPORTE</th>
-        </tr></thead>
-        <tbody>`;
-
-    rows.forEach((row, i) => {
-      const col = row.abuse_score > 50 ? 'var(--red)' : row.abuse_score > 20 ? 'var(--orange)' : 'var(--neon)';
-      const barW = row.abuse_score;
-      const org  = row.org || row.isp || '—';
-      const loc  = [row.city, row.country].filter(Boolean).join(', ') || '—';
-      const tip  = row.is_tor ? '⚠️ TOR' : row.is_hosting ? 'HOSTING' : row.usage_type || '—';
-      const lastRep = row.last_reported ? row.last_reported.split('T')[0] : '—';
-      const rowBg = row.abuse_score > 50 ? 'rgba(225,29,72,.05)' : row.abuse_score > 20 ? 'rgba(245,158,11,.04)' : '';
-      html += `<tr style="background:${rowBg}">
-        <td style="color:var(--muted)">${i+1}</td>
-        <td><span class="ip-addr">${row.ip}</span></td>
-        <td>
-          <span style="color:${col};font-weight:700;font-family:'Space Mono',monospace">${row.abuse_score}%</span>
-          <div class="abuse-bar" style="margin-top:4px"><div class="abuse-fill" style="width:${barW}%;background:${col}"></div></div>
-        </td>
-        <td style="color:var(--muted2);font-size:.68rem">${org}</td>
-        <td style="font-size:.68rem">${loc}</td>
-        <td style="color:var(--muted2);font-size:.68rem">${tip}</td>
-        <td style="font-family:'Space Mono',monospace;font-size:.68rem">${row.total_reports}</td>
-        <td style="color:var(--muted2);font-family:'Space Mono',monospace;font-size:.65rem">${lastRep}</td>
-      </tr>`;
-    });
-
-    html += `</tbody></table></div></div>`;
+        <thead><tr id="ipTableHead">${ipTableHeadHtml()}</tr></thead>
+        <tbody id="ipTableBody">${ipTableRowsHtml(rows)}</tbody>
+      </table>
+      </div>
+    </div>`;
     html += `<div style="height:40px"></div>`;
     resultsEl.innerHTML = html;
     resultsEl.style.display = 'block';
