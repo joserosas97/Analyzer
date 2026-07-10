@@ -12,3 +12,7 @@ services:
         sync: false
       - key: ABUSEIPDB_API_KEY
         sync: false
+      - key: APP_USERNAME
+        sync: false
+      - key: APP_PASSWORD
+        sync: false

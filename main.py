@@ -1,15 +1,19 @@
 import asyncio
 import base64
 import os
+import secrets
 import socket
+import time
+from collections import defaultdict, deque
 from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 load_dotenv()
 
@@ -19,6 +23,83 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 VT_KEY      = os.getenv("VIRUSTOTAL_API_KEY", "")
 URLSCAN_KEY = os.getenv("URLSCAN_API_KEY", "")
 ABUSEIPDB_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
+
+APP_USERNAME = os.getenv("APP_USERNAME", "admin")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+
+if not APP_PASSWORD:
+    print(
+        "[WARN] APP_PASSWORD no está configurada: la app está abierta sin autenticación. "
+        "Define APP_USERNAME/APP_PASSWORD en .env antes de exponerla en red o Render."
+    )
+
+
+class BasicAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if not APP_PASSWORD:
+            return await call_next(request)
+        auth = request.headers.get("authorization", "")
+        if auth.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(auth[6:]).decode("utf-8")
+                user, _, pwd = decoded.partition(":")
+            except Exception:
+                user, pwd = "", ""
+            if secrets.compare_digest(user, APP_USERNAME) and secrets.compare_digest(pwd, APP_PASSWORD):
+                return await call_next(request)
+        return Response(
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="ThreatScope"'},
+        )
+
+
+RATE_LIMIT_WINDOW = 60
+RATE_LIMIT_MAX = 10
+RATE_LIMITED_PATHS = {"/api/scan", "/api/scan-ips"}
+_rate_buckets: dict[str, deque] = defaultdict(deque)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.method == "POST" and request.url.path in RATE_LIMITED_PATHS:
+            client_ip = request.client.host if request.client else "unknown"
+            now = time.monotonic()
+            bucket = _rate_buckets[client_ip]
+            while bucket and now - bucket[0] > RATE_LIMIT_WINDOW:
+                bucket.popleft()
+            if len(bucket) >= RATE_LIMIT_MAX:
+                return JSONResponse(
+                    {"error": "Demasiadas solicitudes. Intenta de nuevo en unos segundos."},
+                    status_code=429,
+                )
+            bucket.append(now)
+        return await call_next(request)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src https://fonts.gstatic.com; "
+            "img-src 'self' data: https://urlscan.io; "
+            "connect-src 'self'; "
+            "script-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+        return response
+
+
+# El orden importa: se ejecutan en orden inverso al de registro (el último
+# agregado corre primero). Queremos: headers de seguridad en toda respuesta,
+# luego auth, luego rate limit, luego la ruta.
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(BasicAuthMiddleware)
 
 
 class ScanRequest(BaseModel):
@@ -191,28 +272,21 @@ async def check_abuseipdb(ip: str, client: httpx.AsyncClient) -> dict:
         return {"error": str(e)}
 
 
-async def check_ip_geo(ip: str, client: httpx.AsyncClient) -> dict:
-    if not ip:
+def geo_from_abuse(abuse: dict) -> dict:
+    """Deriva país/hosting a partir de AbuseIPDB en vez de consultar ip-api.com
+    (que solo ofrece HTTPS en su plan pago, filtrando las IPs consultadas en
+    texto plano)."""
+    if not abuse or abuse.get("error"):
         return {}
-    try:
-        r = await client.get(
-            f"http://ip-api.com/json/{ip}",
-            params={"fields": "status,country,regionName,city,org,as,hosting"},
-            timeout=10,
-        )
-        data = r.json()
-        if data.get("status") == "success":
-            return {
-                "city": data.get("city", ""),
-                "region": data.get("regionName", ""),
-                "country": data.get("country", ""),
-                "org": data.get("org", ""),
-                "asn": data.get("as", ""),
-                "is_hosting": data.get("hosting", False),
-            }
-    except Exception:
-        pass
-    return {}
+    usage = (abuse.get("usage_type") or "").lower()
+    is_hosting = any(
+        k in usage
+        for k in ("hosting", "data center", "datacenter", "colocation", "content delivery")
+    )
+    return {
+        "country": abuse.get("country", ""),
+        "is_hosting": is_hosting,
+    }
 
 
 async def check_whois(domain: str, client: httpx.AsyncClient) -> dict:
@@ -266,7 +340,8 @@ async def analyze_contacted_ips(ips: list[str], main_ip: str, client: httpx.Asyn
         return []
 
     async def check_one(ip: str) -> dict:
-        abuse, geo = await asyncio.gather(check_abuseipdb(ip, client), check_ip_geo(ip, client))
+        abuse = await check_abuseipdb(ip, client)
+        geo = geo_from_abuse(abuse)
         return {
             "ip": ip,
             "abuse_score": abuse.get("abuse_score", 0),
@@ -274,9 +349,8 @@ async def analyze_contacted_ips(ips: list[str], main_ip: str, client: httpx.Asyn
             "isp": abuse.get("isp", ""),
             "usage_type": abuse.get("usage_type", ""),
             "is_tor": abuse.get("is_tor", False),
-            "country": geo.get("country", abuse.get("country", "")),
-            "city": geo.get("city", ""),
-            "org": geo.get("org", ""),
+            "country": geo.get("country", ""),
+            "org": abuse.get("isp", ""),
             "is_hosting": geo.get("is_hosting", False),
         }
 
@@ -312,6 +386,9 @@ async def save_keys(body: KeysRequest):
         "ABUSEIPDB_API_KEY":  body.abuseipdb,
     }
     for env_key, val in mapping.items():
+        # Sin esto, un valor con saltos de línea podría inyectar variables
+        # de entorno arbitrarias en el archivo .env (ej. "x\nAPP_PASSWORD=").
+        val = val.replace("\n", "").replace("\r", "").strip()
         if val:
             existing[env_key] = val
     with open(env_path, "w", encoding="utf-8") as f:
@@ -333,7 +410,8 @@ async def scan_ips(body: IPListRequest):
         return {"results": []}
 
     async def check_one(ip: str, client: httpx.AsyncClient) -> dict:
-        abuse, geo = await asyncio.gather(check_abuseipdb(ip, client), check_ip_geo(ip, client))
+        abuse = await check_abuseipdb(ip, client)
+        geo = geo_from_abuse(abuse)
         return {
             "ip": ip,
             "abuse_score": abuse.get("abuse_score", 0),
@@ -343,10 +421,7 @@ async def scan_ips(body: IPListRequest):
             "usage_type": abuse.get("usage_type", ""),
             "is_tor": abuse.get("is_tor", False),
             "country": geo.get("country", ""),
-            "city": geo.get("city", ""),
-            "region": geo.get("region", ""),
-            "org": geo.get("org", ""),
-            "asn": geo.get("asn", ""),
+            "org": abuse.get("isp", ""),
             "is_hosting": geo.get("is_hosting", False),
             "last_reported": abuse.get("last_reported", ""),
             "error": abuse.get("error", ""),
@@ -375,13 +450,13 @@ async def scan_url(body: ScanRequest):
     ip       = resolve_ip(hostname) if hostname else None
 
     async with httpx.AsyncClient() as client:
-        vt, abuse, urlscan, geo, whois = await asyncio.gather(
+        vt, abuse, urlscan, whois = await asyncio.gather(
             check_virustotal(url, client),
             check_abuseipdb(ip or "", client),
             check_urlscan(url, client),
-            check_ip_geo(ip or "", client),
             check_whois(hostname, client),
         )
+        geo = geo_from_abuse(abuse)
         contacted_ips_analysis = []
         if isinstance(urlscan, dict) and urlscan.get("ips_contacted"):
             contacted_ips_analysis = await analyze_contacted_ips(
