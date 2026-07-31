@@ -22,6 +22,13 @@ function esc(val) {
 
 urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') startScan(); });
 
+/* ── Theme toggle ── */
+document.getElementById('themeToggleBtn').addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('ts-theme', next);
+});
+
 /* Los manejadores de click se conectan aquí (en vez de onclick="" inline en el
    HTML) porque la Content-Security-Policy del servidor usa script-src 'self'
    sin 'unsafe-inline', que bloquea cualquier atributo onclick/onerror inline. */
@@ -113,7 +120,7 @@ async function startIpScan() {
   const btn = document.getElementById('scanIpBtn');
   const btnTxt = document.getElementById('btnIpText');
   btn.disabled = true;
-  btnTxt.textContent = '[ SCANNING... ]';
+  btnTxt.textContent = 'Escaneando...';
   emptyState.style.display = 'none';
   resultsEl.style.display = 'none';
   resultsEl.innerHTML = '';
@@ -121,8 +128,8 @@ async function startIpScan() {
   logOut.innerHTML = '';
   sources.forEach(s => { document.getElementById(s).className = 'src-pill'; });
   radarSweep.classList.add('active');
-  setRadar('SCANNING', `${ips.length} IPs`, 'var(--neon)');
-  leftFooter.textContent = `SCANNING ${ips.length} IPs...`;
+  setRadar('Escaneando', `${ips.length} IPs`, 'var(--neon)');
+  leftFooter.textContent = `Escaneando ${ips.length} IPs...`;
 
   log(`Consultando ${ips.length} IPs en paralelo...`);
   srcActive('src-ab');
@@ -137,7 +144,7 @@ async function startIpScan() {
     if (res.status === 429) {
       log('ERROR: Demasiadas solicitudes. Espera un momento antes de reintentar.');
       radarSweep.classList.remove('active');
-      setRadar('LIMITADO', '!', 'var(--orange)');
+      setRadar('Limitado', '!', 'var(--orange)');
       return;
     }
     const data = await res.json();
@@ -146,10 +153,10 @@ async function startIpScan() {
   } catch(e) {
     log('ERROR: No se pudo conectar con el servidor.');
     radarSweep.classList.remove('active');
-    setRadar('ERROR', '!', 'var(--red)');
+    setRadar('Error', '!', 'var(--red)');
   } finally {
     btn.disabled = false;
-    btnTxt.textContent = '[ SCAN IPs ]';
+    btnTxt.textContent = 'Escanear IPs';
   }
 }
 
@@ -288,14 +295,13 @@ function renderIpResults(rows) {
   radarDot.setAttribute('fill', vColor);
   srcResult('src-ab', malCount ? 'danger' : suspCount ? 'warning' : 'safe');
   srcResult('src-geo', 'safe');
-  leftFooter.textContent = `LAST SCAN: ${new Date().toLocaleTimeString()}`;
+  leftFooter.textContent = `Último escaneo: ${new Date().toLocaleTimeString()}`;
 
   logOut.style.display = 'none';
 
-  let html = `<div class="block">
+  let html = `<div class="block surface block-wide">
     <div class="block-head">
       <span class="block-num">01</span>
-      <span class="block-icon">🕵️</span>
       <span class="block-title col-${malCount ? 'red' : suspCount ? 'orange' : 'neon'}">REPUTACIÓN DE IPs</span>
       <span class="block-badge col-${malCount ? 'red' : suspCount ? 'orange' : 'neon'}">${malCount ? `${malCount} MALICIOSAS` : suspCount ? `${suspCount} SOSPECHOSAS` : 'TODAS LIMPIAS'}</span>
       <button class="btn-export" id="exportIpCsvBtn">⬇ EXPORTAR CSV</button>
@@ -307,12 +313,11 @@ function renderIpResults(rows) {
     </table>
     </div>
   </div>`;
-  html += `<div style="height:40px"></div>`;
   resultsEl.innerHTML = html;
-  resultsEl.style.display = 'block';
+  resultsEl.style.display = 'grid';
   document.getElementById('exportIpCsvBtn').addEventListener('click', exportIpCsv);
   attachIpTableHeadListeners();
-  document.getElementById('rightPanel').scrollTo({ top: 0 });
+  resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 const sources = ['src-vt','src-us','src-ab','src-geo','src-wh'];
@@ -346,7 +351,7 @@ async function startScan() {
 
   // Reset UI
   scanBtn.disabled = true;
-  btnText.textContent = '[ SCANNING... ]';
+  btnText.textContent = 'Escaneando...';
   emptyState.style.display = 'none';
   resultsEl.style.display = 'none';
   resultsEl.innerHTML = '';
@@ -360,8 +365,8 @@ async function startScan() {
   radarDot.style.display = 'none';
 
   radarSweep.classList.add('active');
-  setRadar('SCANNING', '...', 'var(--neon)');
-  leftFooter.textContent = 'SCANNING TARGET...';
+  setRadar('Escaneando', '...', 'var(--neon)');
+  leftFooter.textContent = 'Escaneando objetivo...';
 
   log(`Iniciando análisis de ${url}`);
   log('Consultando VirusTotal...');
@@ -381,7 +386,7 @@ async function startScan() {
     if (res.status === 429) {
       log('ERROR: Demasiadas solicitudes. Espera un momento antes de reintentar.');
       radarSweep.classList.remove('active');
-      setRadar('LIMITADO', '!', 'var(--orange)');
+      setRadar('Limitado', '!', 'var(--orange)');
       return;
     }
     const data = await res.json();
@@ -390,10 +395,10 @@ async function startScan() {
   } catch (e) {
     log('ERROR: No se pudo conectar con el servidor.');
     radarSweep.classList.remove('active');
-    setRadar('ERROR', '!', 'var(--red)');
+    setRadar('Error', '!', 'var(--red)');
   } finally {
     scanBtn.disabled = false;
-    btnText.textContent = '[ SCAN TARGET ]';
+    btnText.textContent = 'Escanear objetivo';
   }
 }
 
@@ -446,7 +451,7 @@ function renderResults(d) {
   document.getElementById('qs-us').style.color = usMal ? 'var(--red)' : 'var(--blue)';
   document.getElementById('qs-ips').textContent = cias.length || (us.ips_contacted||[]).length;
   quickStats.style.display = 'grid';
-  leftFooter.textContent = `LAST SCAN: ${new Date().toLocaleTimeString()}`;
+  leftFooter.textContent = `Último escaneo: ${new Date().toLocaleTimeString()}`;
 
   logOut.style.display = 'none';
 
@@ -455,11 +460,10 @@ function renderResults(d) {
   function logRow(key, val, cls='') {
     return `<div class="log-row"><span class="log-key">${key}</span><span class="log-sep"> </span><span class="log-val ${cls}">${val}</span></div>`;
   }
-  function block(num, icon, title, badgeText, badgeCol, body) {
-    return `<div class="block">
+  function block(num, icon, title, badgeText, badgeCol, body, wide=false) {
+    return `<div class="block surface${wide ? ' block-wide' : ''}">
       <div class="block-head">
         <span class="block-num">${String(num).padStart(2,'0')}</span>
-        <span class="block-icon">${icon}</span>
         <span class="block-title col-${badgeCol}">${title}</span>
         <span class="block-badge col-${badgeCol}">${badgeText}</span>
       </div>
@@ -471,7 +475,7 @@ function renderResults(d) {
     return `<div class="ring-row">
       <div class="ring-mini">
         <svg width="52" height="52" viewBox="0 0 52 52">
-          <circle cx="26" cy="26" r="${r}" fill="none" stroke="#112240" stroke-width="5"/>
+          <circle cx="26" cy="26" r="${r}" fill="none" style="stroke:var(--border)" stroke-width="5"/>
           <circle cx="26" cy="26" r="${r}" fill="none" stroke="${col}" stroke-width="5"
             stroke-dasharray="${dash} ${c}" stroke-linecap="round"/>
         </svg>
@@ -548,7 +552,7 @@ function renderResults(d) {
       </div>`;
     });
     detBody += `</div>`;
-    html += block(3,'☣','MOTORES POSITIVOS', `${vt.detections.length} ENGINES`, 'red', detBody);
+    html += block(3,'☣','MOTORES POSITIVOS', `${vt.detections.length} ENGINES`, 'red', detBody, true);
   }
 
   /* 04 — Infraestructura */
@@ -602,7 +606,7 @@ function renderResults(d) {
         <div class="t-wrap">${us.domains_contacted.map(dom=>`<span class="t">${esc(dom)}</span>`).join('')}</div>
       </div>`;
     }
-    html += block(6,'🔗','RED Y TECNOLOGÍAS', `${(us.domains_contacted||[]).length} DOMINIOS`, 'blue', netBody);
+    html += block(6,'🔗','RED Y TECNOLOGÍAS', `${(us.domains_contacted||[]).length} DOMINIOS`, 'blue', netBody, true);
   }
 
   /* 07 — IPs contactadas (renumbered from 07) */
@@ -634,19 +638,19 @@ function renderResults(d) {
     ipBody += `</tbody></table></div>`;
     const ipBadge = malCount ? `${malCount} MALICIOSAS` : suspCount ? `${suspCount} SOSPECHOSAS` : 'ALL CLEAN';
     const ipCol   = malCount ? 'red' : suspCount ? 'orange' : 'neon';
-    html += block(7,'🕵','REPUTACIÓN IPs CONTACTADAS', ipBadge, ipCol, ipBody);
+    html += block(7,'','REPUTACIÓN IPs CONTACTADAS', ipBadge, ipCol, ipBody, true);
   }
 
   /* 08 — Screenshot (solo si URLscan encontró una página web real) */
   const isWebPage = us.page_title || (us.mime_type && us.mime_type.includes('html'));
   if (us.screenshot && isWebPage) {
     html += block(8,'📸','SCREENSHOT', 'URLSCAN.IO', 'muted',
-      `<img class="ss-img" id="screenshotImg" src="${esc(us.screenshot)}" alt="screenshot"/>`);
+      `<img class="ss-img" id="screenshotImg" src="${esc(us.screenshot)}" alt="screenshot"/>`, true);
   }
 
   resultsEl.innerHTML = html;
-  resultsEl.style.display = 'block';
+  resultsEl.style.display = 'grid';
   const ssImg = document.getElementById('screenshotImg');
   if (ssImg) ssImg.addEventListener('error', () => { ssImg.closest('.block').style.display = 'none'; });
-  document.getElementById('rightPanel').scrollTo({ top: 0 });
+  resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

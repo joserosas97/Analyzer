@@ -29,14 +29,18 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 
 if not APP_PASSWORD:
     print(
-        "[WARN] APP_PASSWORD no está configurada: la app está abierta sin autenticación. "
-        "Define APP_USERNAME/APP_PASSWORD en .env antes de exponerla en red o Render."
+        "[WARN] APP_PASSWORD no está configurada: /api/keys queda abierto y cualquiera "
+        "podría sobrescribir tus API keys. Define APP_USERNAME/APP_PASSWORD en .env "
+        "antes de exponer la app en red o Render."
     )
+
+
+PROTECTED_PATHS = {"/api/keys"}
 
 
 class BasicAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        if not APP_PASSWORD:
+        if not APP_PASSWORD or request.url.path not in PROTECTED_PATHS:
             return await call_next(request)
         auth = request.headers.get("authorization", "")
         if auth.startswith("Basic "):
