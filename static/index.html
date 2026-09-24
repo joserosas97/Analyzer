@@ -242,6 +242,12 @@
     .mode-tab.active { color: var(--accent-contrast); background: var(--accent); }
 
     .scan-body { padding: 10px 14px 14px; }
+    .mode-hint {
+      font-size: 0.68rem;
+      color: var(--muted2);
+      line-height: 1.5;
+      margin: 2px 2px 10px;
+    }
 
     .url-input-wrap { position: relative; }
     .url-prefix {
@@ -759,16 +765,17 @@
 
     <section class="hero">
       <span class="eyebrow">Threat Intelligence Platform</span>
-      <h1>Analiza cualquier <span class="accent-text">URL</span> o <span class="accent-text">IP</span> en segundos</h1>
+      <h1>Analiza cualquier <span class="accent-text">URL</span> o <span class="accent-text">IP</span></h1>
       <p class="hero-sub">Cruza datos de VirusTotal, URLscan.io, AbuseIPDB, GeoIP y WHOIS en un solo reporte de amenazas.</p>
 
       <div class="scan-panel">
         <div class="mode-tabs">
-          <button class="mode-tab active" id="tab-url">URL Scan</button>
-          <button class="mode-tab" id="tab-ip">IP Scanner</button>
+          <button class="mode-tab active" id="tab-url">Individual</button>
+          <button class="mode-tab" id="tab-ip">Múltiples IPs</button>
         </div>
         <div class="scan-body">
           <div id="mode-url">
+            <p class="mode-hint">Una URL o una sola IP — reporte completo: VirusTotal, urlscan, AbuseIPDB, WHOIS y Shodan.</p>
             <div class="url-input-wrap">
               <span class="url-prefix">🔗</span>
               <input class="url-input" id="urlInput" type="text" placeholder="https://sitio-sospechoso.com" spellcheck="false" autocomplete="off"/>
@@ -778,6 +785,7 @@
             </button>
           </div>
           <div id="mode-ip" style="display:none">
+            <p class="mode-hint">Varias IPs a la vez (hasta 20) — reputación rápida: AbuseIPDB, GeoIP y puertos/vulns de Shodan.</p>
             <textarea class="ip-textarea" id="ipTextarea" placeholder="Una IP por línea:&#10;192.168.1.1&#10;8.8.8.8&#10;1.1.1.1" spellcheck="false"></textarea>
             <div class="ip-count" id="ipCount">0 IPs</div>
             <button class="scan-btn" id="scanIpBtn" style="margin-top:8px">
