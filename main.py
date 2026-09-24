@@ -23,6 +23,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 VT_KEY      = os.getenv("VIRUSTOTAL_API_KEY", "")
 URLSCAN_KEY = os.getenv("URLSCAN_API_KEY", "")
 ABUSEIPDB_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
+SHODAN_KEY  = os.getenv("SHODAN_API_KEY", "")
 
 APP_USERNAME = os.getenv("APP_USERNAME", "admin")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
@@ -116,6 +117,7 @@ class KeysRequest(BaseModel):
     virustotal: str = ""
     urlscan: str = ""
     abuseipdb: str = ""
+    shodan: str = ""
 
 
 def resolve_ip(hostname: str) -> str | None:
@@ -276,6 +278,94 @@ async def check_abuseipdb(ip: str, client: httpx.AsyncClient) -> dict:
         return {"error": str(e)}
 
 
+EMPTY_SHODAN_FIELDS = {
+    "org": "", "isp": "", "os": None, "asn": "", "country": "", "city": "",
+    "hostnames": [], "domains": [], "services": [], "tags": [], "cpes": [], "last_update": "",
+}
+
+
+async def _check_shodan_host_api(ip: str, client: httpx.AsyncClient) -> dict | None:
+    """Host API de pago (requiere membership): datos completos, org/isp/os/banners.
+    Devuelve None si falla para que el caller haga fallback a InternetDB."""
+    try:
+        r = await client.get(
+            f"https://api.shodan.io/shodan/host/{ip}",
+            params={"key": SHODAN_KEY},
+            timeout=15,
+        )
+        if r.status_code == 404:
+            return {**EMPTY_SHODAN_FIELDS, "ip": ip, "indexed": False, "source": "shodan_api", "ports": [], "vulns": []}
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        services = [
+            {
+                "port": item.get("port"),
+                "transport": item.get("transport", "tcp"),
+                "product": item.get("product", ""),
+                "version": item.get("version", ""),
+            }
+            for item in data.get("data", [])[:15]
+        ]
+        return {
+            "ip": data.get("ip_str", ip),
+            "indexed": True,
+            "source": "shodan_api",
+            "org": data.get("org", ""),
+            "isp": data.get("isp", ""),
+            "os": data.get("os"),
+            "asn": data.get("asn", ""),
+            "country": data.get("country_name", ""),
+            "city": data.get("city", ""),
+            "hostnames": data.get("hostnames", []),
+            "domains": data.get("domains", []),
+            "ports": sorted(data.get("ports", [])),
+            "vulns": sorted(data.get("vulns", [])),
+            "services": services,
+            "tags": [],
+            "cpes": [],
+            "last_update": data.get("last_update", ""),
+        }
+    except Exception:
+        return None
+
+
+async def _check_shodan_internetdb(ip: str, client: httpx.AsyncClient) -> dict:
+    """InternetDB: endpoint gratuito de Shodan, sin API key. Solo puertos, CVEs,
+    hostnames y tags (sin org/isp/os/banners, eso es exclusivo del Host API de pago)."""
+    try:
+        r = await client.get(f"https://internetdb.shodan.io/{ip}", timeout=15)
+        if r.status_code == 404:
+            return {**EMPTY_SHODAN_FIELDS, "ip": ip, "indexed": False, "source": "internetdb", "ports": [], "vulns": []}
+        if r.status_code != 200:
+            return {"error": f"Error Shodan: {r.status_code}"}
+        data = r.json()
+        return {
+            **EMPTY_SHODAN_FIELDS,
+            "ip": data.get("ip", ip),
+            "indexed": True,
+            "source": "internetdb",
+            "hostnames": data.get("hostnames", []),
+            "ports": sorted(data.get("ports", [])),
+            "vulns": sorted(data.get("vulns", [])),
+            "tags": data.get("tags", []),
+            "cpes": data.get("cpes", []),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+async def check_shodan(ip: str, client: httpx.AsyncClient) -> dict:
+    if not ip:
+        return {"error": "IP vacía"}
+    if SHODAN_KEY:
+        result = await _check_shodan_host_api(ip, client)
+        if result is not None:
+            return result
+        # La key no tiene membership o falló: usamos el fallback gratuito.
+    return await _check_shodan_internetdb(ip, client)
+
+
 def geo_from_abuse(abuse: dict) -> dict:
     """Deriva país/hosting a partir de AbuseIPDB en vez de consultar ip-api.com
     (que solo ofrece HTTPS en su plan pago, filtrando las IPs consultadas en
@@ -369,12 +459,13 @@ async def get_keys():
         "virustotal": "✓" if VT_KEY else "",
         "urlscan":    "✓" if URLSCAN_KEY else "",
         "abuseipdb":  "✓" if ABUSEIPDB_KEY else "",
+        "shodan":     "✓" if SHODAN_KEY else "",
     }
 
 
 @app.post("/api/keys")
 async def save_keys(body: KeysRequest):
-    global VT_KEY, URLSCAN_KEY, ABUSEIPDB_KEY
+    global VT_KEY, URLSCAN_KEY, ABUSEIPDB_KEY, SHODAN_KEY
     env_path = os.path.join(os.path.dirname(__file__), ".env")
     existing: dict[str, str] = {}
     if os.path.exists(env_path):
@@ -388,6 +479,7 @@ async def save_keys(body: KeysRequest):
         "VIRUSTOTAL_API_KEY": body.virustotal,
         "URLSCAN_API_KEY":    body.urlscan,
         "ABUSEIPDB_API_KEY":  body.abuseipdb,
+        "SHODAN_API_KEY":     body.shodan,
     }
     for env_key, val in mapping.items():
         # Sin esto, un valor con saltos de línea podría inyectar variables
@@ -401,6 +493,7 @@ async def save_keys(body: KeysRequest):
     VT_KEY        = existing.get("VIRUSTOTAL_API_KEY", "")
     URLSCAN_KEY   = existing.get("URLSCAN_API_KEY", "")
     ABUSEIPDB_KEY = existing.get("ABUSEIPDB_API_KEY", "")
+    SHODAN_KEY    = existing.get("SHODAN_API_KEY", "")
     return {"ok": True}
 
 
@@ -414,7 +507,9 @@ async def scan_ips(body: IPListRequest):
         return {"results": []}
 
     async def check_one(ip: str, client: httpx.AsyncClient) -> dict:
-        abuse = await check_abuseipdb(ip, client)
+        abuse, shodan = await asyncio.gather(
+            check_abuseipdb(ip, client), check_shodan(ip, client)
+        )
         geo = geo_from_abuse(abuse)
         return {
             "ip": ip,
@@ -429,6 +524,8 @@ async def scan_ips(body: IPListRequest):
             "is_hosting": geo.get("is_hosting", False),
             "last_reported": abuse.get("last_reported", ""),
             "error": abuse.get("error", ""),
+            "open_ports": shodan.get("ports", []),
+            "vulns": shodan.get("vulns", []),
         }
 
     async with httpx.AsyncClient() as client:
@@ -454,11 +551,12 @@ async def scan_url(body: ScanRequest):
     ip       = resolve_ip(hostname) if hostname else None
 
     async with httpx.AsyncClient() as client:
-        vt, abuse, urlscan, whois = await asyncio.gather(
+        vt, abuse, urlscan, whois, shodan = await asyncio.gather(
             check_virustotal(url, client),
             check_abuseipdb(ip or "", client),
             check_urlscan(url, client),
             check_whois(hostname, client),
+            check_shodan(ip or "", client),
         )
         geo = geo_from_abuse(abuse)
         contacted_ips_analysis = []
@@ -476,6 +574,7 @@ async def scan_url(body: ScanRequest):
         "urlscan": urlscan,
         "geo": geo,
         "whois": whois,
+        "shodan": shodan,
         "contacted_ips_analysis": contacted_ips_analysis,
     }
 

@@ -52,13 +52,14 @@ async function openSettings() {
     document.getElementById('st-vt').textContent = data.virustotal ? '● CONFIGURADA' : '';
     document.getElementById('st-us').textContent = data.urlscan    ? '● CONFIGURADA' : '';
     document.getElementById('st-ab').textContent = data.abuseipdb  ? '● CONFIGURADA' : '';
+    document.getElementById('st-sh').textContent = data.shodan     ? '● CONFIGURADA' : '';
   } catch {}
 }
 
 function closeSettings() {
   document.getElementById('settingsOverlay').classList.remove('open');
   document.getElementById('settingsMsg').style.display = 'none';
-  ['k-vt','k-us','k-ab'].forEach(id => document.getElementById(id).value = '');
+  ['k-vt','k-us','k-ab','k-sh'].forEach(id => document.getElementById(id).value = '');
 }
 
 function closeOnBg(e) {
@@ -71,6 +72,7 @@ async function saveKeys() {
     virustotal: document.getElementById('k-vt').value.trim(),
     urlscan:    document.getElementById('k-us').value.trim(),
     abuseipdb:  document.getElementById('k-ab').value.trim(),
+    shodan:     document.getElementById('k-sh').value.trim(),
   };
   if (!Object.values(body).some(v => v)) {
     msg.style.display = 'block';
@@ -84,11 +86,17 @@ async function saveKeys() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    msg.style.display = 'block';
     if (res.ok) {
-      msg.style.display = 'block';
       msg.style.color = 'var(--neon)';
       msg.textContent = '✓ Keys guardadas correctamente';
       setTimeout(closeSettings, 1200);
+    } else if (res.status === 401) {
+      msg.style.color = 'var(--red)';
+      msg.textContent = '// No autorizado: esta instancia requiere credenciales de administrador para guardar keys';
+    } else {
+      msg.style.color = 'var(--red)';
+      msg.textContent = `// Error al guardar (${res.status})`;
     }
   } catch {
     msg.style.display = 'block';
@@ -134,6 +142,7 @@ async function startIpScan() {
   log(`Consultando ${ips.length} IPs en paralelo...`);
   srcActive('src-ab');
   srcActive('src-geo');
+  srcActive('src-sh');
 
   try {
     const res = await fetch('/api/scan-ips', {
@@ -172,6 +181,8 @@ const ipSortGetters = {
   type:          r => (r.is_tor ? 'tor' : r.is_hosting ? 'hosting' : (r.usage_type || '')).toLowerCase(),
   total_reports: r => r.total_reports || 0,
   last_reported: r => r.last_reported || '',
+  open_ports:    r => (r.open_ports || []).length,
+  vulns:         r => (r.vulns || []).length,
 };
 
 const IP_TBL_COLS = [
@@ -183,6 +194,8 @@ const IP_TBL_COLS = [
   { label: 'TIPO',           key: 'type' },
   { label: 'REPORTES',       key: 'total_reports' },
   { label: 'ÚLTIMO REPORTE', key: 'last_reported' },
+  { label: 'PUERTOS',        key: 'open_ports' },
+  { label: 'VULNS (CVE)',    key: 'vulns' },
 ];
 
 function sortIpRows(key) {
@@ -210,14 +223,16 @@ function csvEscape(val) {
 
 function exportIpCsv() {
   if (!ipScanRows.length) return;
-  const header = ['IP', 'Abuse Score', 'Organizacion', 'Ubicacion', 'Tipo', 'Reportes', 'Ultimo Reporte'];
+  const header = ['IP', 'Abuse Score', 'Organizacion', 'Ubicacion', 'Tipo', 'Reportes', 'Ultimo Reporte', 'Puertos Abiertos', 'Vulns (CVE)'];
   const lines = [header.join(',')];
   getSortedIpRows().forEach(row => {
     const org = row.org || row.isp || '';
     const loc = [row.city, row.country].filter(Boolean).join(', ');
     const tip = row.is_tor ? 'TOR' : row.is_hosting ? 'HOSTING' : (row.usage_type || '');
     const lastRep = row.last_reported ? row.last_reported.split('T')[0] : '';
-    lines.push([row.ip, `${row.abuse_score}%`, org, loc, tip, row.total_reports, lastRep].map(csvEscape).join(','));
+    const ports = (row.open_ports || []).join(' ');
+    const vulns = (row.vulns || []).join(' ');
+    lines.push([row.ip, `${row.abuse_score}%`, org, loc, tip, row.total_reports, lastRep, ports, vulns].map(csvEscape).join(','));
   });
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -255,6 +270,12 @@ function ipTableRowsHtml(rows) {
     const tip  = row.is_tor ? '⚠️ TOR' : row.is_hosting ? 'HOSTING' : esc(row.usage_type || '—');
     const lastRep = row.last_reported ? esc(row.last_reported.split('T')[0]) : '—';
     const rowBg = row.abuse_score > 50 ? 'rgba(225,29,72,.05)' : row.abuse_score > 20 ? 'rgba(245,158,11,.04)' : '';
+    const ports = row.open_ports || [];
+    const vulns = row.vulns || [];
+    const portsTxt = ports.length ? esc(ports.slice(0,6).join(', ') + (ports.length > 6 ? '…' : '')) : '—';
+    const vulnsTxt = vulns.length
+      ? `<span style="color:var(--red);font-weight:700">${vulns.length} ⚠️</span>`
+      : '<span style="color:var(--muted2)">0</span>';
     return `<tr style="background:${rowBg}">
       <td style="color:var(--muted)">${i+1}</td>
       <td><span class="ip-addr">${esc(row.ip)}</span></td>
@@ -267,6 +288,8 @@ function ipTableRowsHtml(rows) {
       <td style="color:var(--muted2);font-size:.68rem">${tip}</td>
       <td style="font-family:'Space Mono',monospace;font-size:.68rem">${row.total_reports}</td>
       <td style="color:var(--muted2);font-family:'Space Mono',monospace;font-size:.65rem">${lastRep}</td>
+      <td style="color:var(--muted2);font-family:'Space Mono',monospace;font-size:.65rem">${portsTxt}</td>
+      <td style="font-family:'Space Mono',monospace;font-size:.68rem">${vulnsTxt}</td>
     </tr>`;
   }).join('');
 }
@@ -295,6 +318,8 @@ function renderIpResults(rows) {
   radarDot.setAttribute('fill', vColor);
   srcResult('src-ab', malCount ? 'danger' : suspCount ? 'warning' : 'safe');
   srcResult('src-geo', 'safe');
+  const vulnCount = rows.filter(r => (r.vulns || []).length > 0).length;
+  srcResult('src-sh', vulnCount ? 'danger' : 'safe');
   leftFooter.textContent = `Último escaneo: ${new Date().toLocaleTimeString()}`;
 
   logOut.style.display = 'none';
@@ -320,7 +345,7 @@ function renderIpResults(rows) {
   resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-const sources = ['src-vt','src-us','src-ab','src-geo','src-wh'];
+const sources = ['src-vt','src-us','src-ab','src-geo','src-wh','src-sh'];
 
 function setRadar(label, val, color) {
   radarLabel.textContent = label;
@@ -376,6 +401,7 @@ async function startScan() {
   setTimeout(() => { log('Consultando AbuseIPDB...'); srcActive('src-ab'); }, 1400);
   setTimeout(() => { log('Resolviendo GeoIP...'); srcActive('src-geo'); }, 1900);
   setTimeout(() => { log('Consultando WHOIS/RDAP...'); srcActive('src-wh'); }, 2400);
+  setTimeout(() => { log('Consultando Shodan...'); srcActive('src-sh'); }, 2900);
 
   try {
     const res = await fetch('/api/scan', {
@@ -409,6 +435,7 @@ function renderResults(d) {
   const us     = d.urlscan    || {};
   const geo    = d.geo        || {};
   const whois  = d.whois      || {};
+  const shodan = d.shodan     || {};
   const cias   = d.contacted_ips_analysis || [];
 
   const vtMal  = vt.malicious   || 0;
@@ -441,6 +468,7 @@ function renderResults(d) {
   srcResult('src-ab', aScore > 50 ? 'danger' : aScore > 20 ? 'warning' : 'safe');
   srcResult('src-geo', 'safe');
   srcResult('src-wh', 'safe');
+  srcResult('src-sh', (shodan.vulns || []).length ? 'danger' : shodan.error ? 'safe' : (shodan.ports || []).length ? 'warning' : 'safe');
 
   // Quick stats
   document.getElementById('qs-vt').textContent = `${vtMal}/${vtTotal}`;
@@ -574,7 +602,47 @@ function renderResults(d) {
   }
   html += block(4,'🌐','INFRAESTRUCTURA', esc(d.ip || 'N/A'), 'blue', infraBody);
 
-  /* 05 — WHOIS */
+  /* 05 — Shodan */
+  let shBody = '';
+  const shPorts = shodan.ports || [];
+  const shVulns = shodan.vulns || [];
+  if (shodan.error) {
+    shBody = `<p class="err-txt">${esc(shodan.error)}</p>`;
+  } else if (shodan.indexed === false) {
+    shBody = `<p class="err-txt" style="color:var(--muted2)">// IP NO INDEXADA EN SHODAN</p>`;
+  } else {
+    if (shodan.org)  shBody += logRow('org', esc(shodan.org), 'v-muted');
+    if (shodan.os)   shBody += logRow('os', esc(shodan.os), 'v-blue');
+    if (shodan.asn)  shBody += logRow('asn', esc(shodan.asn), 'v-muted');
+    if (shPorts.length) {
+      shBody += `<div class="log-row" style="flex-direction:column;gap:6px;align-items:flex-start">
+        <span class="log-key">open_ports</span>
+        <div class="t-wrap">${shPorts.map(p=>`<span class="t t-blue">${p}</span>`).join('')}</div>
+      </div>`;
+    }
+    if (shodan.tags?.length) {
+      shBody += `<div class="log-row" style="flex-direction:column;gap:6px;align-items:flex-start">
+        <span class="log-key">tags</span>
+        <div class="t-wrap">${shodan.tags.map(t=>`<span class="t t-purple">${esc(t)}</span>`).join('')}</div>
+      </div>`;
+    }
+    if (shVulns.length) {
+      const shown = shVulns.slice(0, 20);
+      shBody += `<div class="log-row" style="flex-direction:column;gap:6px;align-items:flex-start">
+        <span class="log-key">vulns_cve (${shVulns.length})</span>
+        <div class="t-wrap">${shown.map(v=>`<span class="t" style="background:color-mix(in srgb, var(--red) 14%, transparent);color:var(--red)">${esc(v)}</span>`).join('')}${shVulns.length > shown.length ? `<span class="t">+${shVulns.length - shown.length} más</span>` : ''}</div>
+      </div>`;
+    }
+    if (shodan.hostnames?.length) shBody += logRow('hostnames', esc(shodan.hostnames.join(', ')), 'v-muted');
+    if (!shPorts.length && !shVulns.length && !shodan.org) {
+      shBody += `<p class="err-txt" style="color:var(--muted2)">// SIN DATOS ADICIONALES</p>`;
+    }
+  }
+  const shBadge = shVulns.length ? `${shVulns.length} VULNS` : shPorts.length ? `${shPorts.length} PUERTOS` : shodan.error ? 'N/A' : 'LIMPIO';
+  const shCol   = shVulns.length ? 'red' : shPorts.length ? 'orange' : 'neon';
+  html += block(5,'🔍','SHODAN', shBadge, shCol, shBody);
+
+  /* 06 — WHOIS */
   let whoBody = '';
   if (!whois.registered && !whois.registrar) {
     whoBody = `<p class="err-txt" style="color:var(--muted2)">// DATOS NO DISPONIBLES PARA ESTE DOMINIO</p>`;
@@ -586,9 +654,9 @@ function renderResults(d) {
     if (whois.nameservers?.length) whoBody += logRow('nameservers', esc(whois.nameservers.join(' | ')), 'v-muted');
     if (whois.status?.length) whoBody += `<div class="log-row"><span class="log-key">status</span><span class="log-sep"> </span><span class="log-val"><div class="t-wrap">${whois.status.map(s=>`<span class="t">${esc(s)}</span>`).join('')}</div></span></div>`;
   }
-  html += block(5,'📋','WHOIS / DOMAIN', esc(d.hostname || '—'), 'purple', whoBody);
+  html += block(6,'📋','WHOIS / DOMAIN', esc(d.hostname || '—'), 'purple', whoBody);
 
-  /* 06 — Red y tecnologías */
+  /* 07 — Red y tecnologías */
   const hasTech   = us.technologies?.length;
   const hasDomains= us.domains_contacted?.length;
   if (hasTech || hasDomains) {
@@ -606,10 +674,10 @@ function renderResults(d) {
         <div class="t-wrap">${us.domains_contacted.map(dom=>`<span class="t">${esc(dom)}</span>`).join('')}</div>
       </div>`;
     }
-    html += block(6,'🔗','RED Y TECNOLOGÍAS', `${(us.domains_contacted||[]).length} DOMINIOS`, 'blue', netBody, true);
+    html += block(7,'🔗','RED Y TECNOLOGÍAS', `${(us.domains_contacted||[]).length} DOMINIOS`, 'blue', netBody, true);
   }
 
-  /* 07 — IPs contactadas (renumbered from 07) */
+  /* 08 — IPs contactadas */
   if (cias.length) {
     const malCount  = cias.filter(x => x.abuse_score > 50).length;
     const suspCount = cias.filter(x => x.abuse_score > 20 && x.abuse_score <= 50).length;
@@ -638,13 +706,13 @@ function renderResults(d) {
     ipBody += `</tbody></table></div>`;
     const ipBadge = malCount ? `${malCount} MALICIOSAS` : suspCount ? `${suspCount} SOSPECHOSAS` : 'ALL CLEAN';
     const ipCol   = malCount ? 'red' : suspCount ? 'orange' : 'neon';
-    html += block(7,'','REPUTACIÓN IPs CONTACTADAS', ipBadge, ipCol, ipBody, true);
+    html += block(8,'','REPUTACIÓN IPs CONTACTADAS', ipBadge, ipCol, ipBody, true);
   }
 
-  /* 08 — Screenshot (solo si URLscan encontró una página web real) */
+  /* 09 — Screenshot (solo si URLscan encontró una página web real) */
   const isWebPage = us.page_title || (us.mime_type && us.mime_type.includes('html'));
   if (us.screenshot && isWebPage) {
-    html += block(8,'📸','SCREENSHOT', 'URLSCAN.IO', 'muted',
+    html += block(9,'📸','SCREENSHOT', 'URLSCAN.IO', 'muted',
       `<img class="ss-img" id="screenshotImg" src="${esc(us.screenshot)}" alt="screenshot"/>`, true);
   }
 
